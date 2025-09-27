@@ -1,4 +1,5 @@
 <!DOCTYPE html>
+
 <html>
 
 <head>
@@ -7,8 +8,11 @@
   <title>Simple Firebase Chat</title>
 
   <script defer src="/__/firebase/12.3.0/firebase-app-compat.js"></script>
+
   <script defer src="/__/firebase/12.3.0/firebase-database-compat.js"></script>
+
   <script defer src="/__/firebase/12.3.0/firebase-storage-compat.js"></script>
+
   <script defer src="/__/firebase/init.js?useEmulator=true"></script>
 
   <style>
@@ -45,6 +49,7 @@
       cursor: pointer;
     }
   </style>
+
 </head>
 
 <body>
@@ -80,7 +85,7 @@
         const username = usernameInput.value.trim();
         const text = messageInput.value.trim();
         if (!username || !text) return;
-        chatRef.push({ username, text, type: "text" });
+        chatRef.push({ username, text, type: "text", edited: false });
         messageInput.value = "";
       };
 
@@ -101,7 +106,13 @@
       });
 
       chatRef.on("child_changed", snap => {
-        document.getElementById("msg-" + snap.key).querySelector(".content").textContent = snap.val().text;
+        const el = document.getElementById("msg-" + snap.key);
+        if (el) {
+          const contentEl = el.querySelector(".content");
+          contentEl.textContent = snap.val().text + (snap.val().edited ? " (edited)" : "");
+          const editBtn = el.querySelector(".editBtn");
+          if (snap.val().edited && editBtn) editBtn.remove();
+        }
       });
 
       chatRef.on("child_removed", snap => {
@@ -116,17 +127,22 @@
         div.innerHTML = `<span>${data.username}:</span> <span class="content"></span>`;
 
         if (data.type === "text") {
-          div.querySelector(".content").textContent = data.text;
-          const editBtn = document.createElement("button");
-          editBtn.textContent = "Edit";
-          editBtn.onclick = () => {
-            const newText = prompt("Edit message:", data.text);
-            if (newText) chatRef.child(id).update({ text: newText });
-          };
+          div.querySelector(".content").textContent = data.text + (data.edited ? " (edited)" : "");
+          if (!data.edited) {
+            const editBtn = document.createElement("button");
+            editBtn.textContent = "Edit";
+            editBtn.className = "editBtn";
+            editBtn.onclick = () => {
+              const newText = prompt("Edit message:", data.text);
+              if (newText && newText !== data.text) {
+                chatRef.child(id).update({ text: newText, edited: true });
+              }
+            };
+            div.appendChild(editBtn);
+          }
           const delBtn = document.createElement("button");
           delBtn.textContent = "Delete";
           delBtn.onclick = () => chatRef.child(id).remove();
-          div.appendChild(editBtn);
           div.appendChild(delBtn);
         } else if (data.type === "file") {
           if (data.fileType === "image") {
@@ -146,6 +162,7 @@
       }
     });
   </script>
+
 </body>
 
 </html>
