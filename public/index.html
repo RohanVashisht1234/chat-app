@@ -1,0 +1,151 @@
+<!DOCTYPE html>
+<html>
+
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Simple Firebase Chat</title>
+
+  <script defer src="/__/firebase/12.3.0/firebase-app-compat.js"></script>
+  <script defer src="/__/firebase/12.3.0/firebase-database-compat.js"></script>
+  <script defer src="/__/firebase/12.3.0/firebase-storage-compat.js"></script>
+  <script defer src="/__/firebase/init.js?useEmulator=true"></script>
+
+  <style>
+    body {
+      font-family: Arial, sans-serif;
+      margin: 20px;
+      background: #f4f4f4;
+    }
+
+    #chat-box {
+      border: 1px solid #ccc;
+      background: #fff;
+      padding: 10px;
+      height: 300px;
+      overflow-y: auto;
+      margin-bottom: 10px;
+    }
+
+    .msg {
+      padding: 6px;
+      border-bottom: 1px solid #eee;
+    }
+
+    .msg span {
+      font-weight: bold;
+    }
+
+    .controls {
+      margin-top: 5px;
+    }
+
+    button {
+      margin-left: 5px;
+      cursor: pointer;
+    }
+  </style>
+</head>
+
+<body>
+  <h2>Simple Chat App</h2>
+  <div>
+    <input type="text" id="username" placeholder="Enter your name">
+  </div>
+  <div id="chat-box"></div>
+  <div>
+    <input type="text" id="message" placeholder="Type a message">
+    <button id="sendText">Send</button>
+  </div>
+  <div>
+    <input type="file" id="fileInput" accept="image/*,video/*">
+    <button id="sendFile">Upload</button>
+  </div>
+
+  <script>
+    document.addEventListener('DOMContentLoaded', function () {
+      let app = firebase.app();
+      const db = firebase.database();
+      const storage = firebase.storage();
+      const chatRef = db.ref("chat");
+
+      const chatBox = document.getElementById("chat-box");
+      const usernameInput = document.getElementById("username");
+      const messageInput = document.getElementById("message");
+      const sendTextBtn = document.getElementById("sendText");
+      const fileInput = document.getElementById("fileInput");
+      const sendFileBtn = document.getElementById("sendFile");
+
+      sendTextBtn.onclick = () => {
+        const username = usernameInput.value.trim();
+        const text = messageInput.value.trim();
+        if (!username || !text) return;
+        chatRef.push({ username, text, type: "text" });
+        messageInput.value = "";
+      };
+
+      sendFileBtn.onclick = () => {
+        const username = usernameInput.value.trim();
+        const file = fileInput.files[0];
+        if (!username || !file) return;
+
+        const fileRef = storage.ref("uploads/" + Date.now() + "_" + file.name);
+        fileRef.put(file).then(snapshot => snapshot.ref.getDownloadURL()).then(url => {
+          chatRef.push({ username, url, fileType: file.type.startsWith("image") ? "image" : "video", type: "file" });
+        });
+      };
+
+      chatRef.on("child_added", snap => {
+        const data = snap.val();
+        renderMessage(snap.key, data);
+      });
+
+      chatRef.on("child_changed", snap => {
+        document.getElementById("msg-" + snap.key).querySelector(".content").textContent = snap.val().text;
+      });
+
+      chatRef.on("child_removed", snap => {
+        const el = document.getElementById("msg-" + snap.key);
+        if (el) el.remove();
+      });
+
+      function renderMessage(id, data) {
+        const div = document.createElement("div");
+        div.className = "msg";
+        div.id = "msg-" + id;
+        div.innerHTML = `<span>${data.username}:</span> <span class="content"></span>`;
+
+        if (data.type === "text") {
+          div.querySelector(".content").textContent = data.text;
+          const editBtn = document.createElement("button");
+          editBtn.textContent = "Edit";
+          editBtn.onclick = () => {
+            const newText = prompt("Edit message:", data.text);
+            if (newText) chatRef.child(id).update({ text: newText });
+          };
+          const delBtn = document.createElement("button");
+          delBtn.textContent = "Delete";
+          delBtn.onclick = () => chatRef.child(id).remove();
+          div.appendChild(editBtn);
+          div.appendChild(delBtn);
+        } else if (data.type === "file") {
+          if (data.fileType === "image") {
+            div.querySelector(".content").innerHTML = `<img src="${data.url}" width="100">`;
+          } else {
+            div.querySelector(".content").innerHTML = `<video src="${data.url}" width="150" controls></video>`;
+          }
+          const delBtn = document.createElement("button");
+          delBtn.textContent = "Delete";
+          delBtn.onclick = () => {
+            firebase.storage().refFromURL(data.url).delete().then(() => chatRef.child(id).remove());
+          };
+          div.appendChild(delBtn);
+        }
+        chatBox.appendChild(div);
+        chatBox.scrollTop = chatBox.scrollHeight;
+      }
+    });
+  </script>
+</body>
+
+</html>
